@@ -1,119 +1,124 @@
 import { useState } from 'react';
-import { AlertTriangle, Check, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Check } from 'lucide-react';
 import { CATEGORIES } from './merchantCategories';
 import './CategoryTuner.css';
 
-/**
- * CategoryTuner - Modal for users to verify/correct ambiguous merchant categorizations.
- * Only shows merchants that the system flagged as ambiguous (e.g., Walmart, Costco).
- */
 export function CategoryTuner({ ambiguousTransactions, onConfirm, onCancel }) {
-    // Group transactions by merchant name for cleaner UI
-    const groupedMerchants = groupByMerchant(ambiguousTransactions);
+    const grouped = groupByMerchant(ambiguousTransactions);
 
     const [corrections, setCorrections] = useState(() => {
-        // Initialize with the default guessed category
         const initial = {};
-        Object.keys(groupedMerchants).forEach(merchant => {
-            initial[merchant] = groupedMerchants[merchant].category;
+        Object.entries(grouped).forEach(([merchant, data]) => {
+            initial[merchant] = data.suggestedCategory;
         });
         return initial;
     });
 
-    const handleCategoryChange = (merchant, newCategory) => {
-        setCorrections(prev => ({ ...prev, [merchant]: newCategory }));
+    const [openDropdown, setOpenDropdown] = useState(null);
+
+    const handleCategoryChange = (merchant, category) => {
+        setCorrections(prev => ({ ...prev, [merchant]: category }));
+        setOpenDropdown(null);
     };
 
     const handleConfirm = () => {
-        // Return corrections map to parent
         onConfirm(corrections);
     };
 
-    if (Object.keys(groupedMerchants).length === 0) {
-        // No ambiguous merchants, auto-proceed
-        onConfirm({});
-        return null;
-    }
-
     return (
-        <div className="tuner-overlay">
-            <div className="tuner-modal">
-                <div className="tuner-header">
-                    <AlertTriangle size={24} className="warning-icon" />
-                    <div>
-                        <h2>Verify Categories</h2>
-                        <p>Some merchants could be in different categories. Please confirm:</p>
-                    </div>
+        <div className="tuner-container">
+            <div className="tuner-header">
+                <div className="tuner-icon">
+                    <AlertTriangle size={24} />
                 </div>
+                <h2>Quick Verification Needed</h2>
+                <p>
+                    We found some merchants that could be categorized differently.
+                    Please verify these top {Object.keys(grouped).length} merchants.
+                </p>
+            </div>
 
-                <div className="merchants-list">
-                    {Object.entries(groupedMerchants).map(([merchant, data]) => (
-                        <div key={merchant} className="merchant-row">
-                            <div className="merchant-info">
+            <div className="merchants-list">
+                {Object.entries(grouped).map(([merchant, data]) => (
+                    <div key={merchant} className="merchant-row">
+                        <div className="merchant-info">
+                            <div className="merchant-badge">?</div>
+                            <div>
                                 <span className="merchant-name">{merchant}</span>
-                                <span className="merchant-amount">
-                                    ${data.total.toLocaleString('en-CA', { minimumFractionDigits: 2 })}
-                                    <span className="tx-count">({data.count} txn{data.count > 1 ? 's' : ''})</span>
+                                <span className="merchant-meta">
+                                    {data.count} transaction{data.count > 1 ? 's' : ''} • ${data.total.toFixed(0)}
                                 </span>
                             </div>
-
-                            <div className="category-options">
-                                {data.possibleCategories.map(cat => (
-                                    <button
-                                        key={cat}
-                                        className={`category-btn ${corrections[merchant] === cat ? 'active' : ''}`}
-                                        onClick={() => handleCategoryChange(merchant, cat)}
-                                    >
-                                        {formatCategoryName(cat)}
-                                    </button>
-                                ))}
-                            </div>
                         </div>
-                    ))}
-                </div>
 
-                <div className="tuner-footer">
-                    <button className="btn-ghost" onClick={onCancel}>
-                        <X size={18} />
-                        Cancel
-                    </button>
-                    <button className="btn-primary-sm" onClick={handleConfirm}>
-                        <Check size={18} />
-                        Confirm & Analyze
-                    </button>
-                </div>
+                        <div className="category-dropdown-container">
+                            <button
+                                className="category-dropdown-btn"
+                                onClick={() => setOpenDropdown(openDropdown === merchant ? null : merchant)}
+                            >
+                                <span>Currently: {formatCategoryName(corrections[merchant])}</span>
+                                <ChevronDown size={16} className={openDropdown === merchant ? 'open' : ''} />
+                            </button>
+
+                            {openDropdown === merchant && (
+                                <div className="category-dropdown-menu">
+                                    {data.possibleCategories.map(cat => (
+                                        <button
+                                            key={cat}
+                                            className={`dropdown-option ${corrections[merchant] === cat ? 'selected' : ''}`}
+                                            onClick={() => handleCategoryChange(merchant, cat)}
+                                        >
+                                            {formatCategoryName(cat)}
+                                            {corrections[merchant] === cat && <Check size={14} />}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ))}
             </div>
+
+            <button className="btn-primary" onClick={handleConfirm}>
+                <Check size={18} />
+                Confirm & See Results
+            </button>
         </div>
     );
 }
 
-// Group transactions by normalized merchant name and sum totals
 function groupByMerchant(transactions) {
-    const groups = {};
+    const grouped = {};
 
     transactions.forEach(tx => {
-        // Normalize merchant name (basic: uppercase, trim)
         const key = tx.description.toUpperCase().trim();
-
-        if (!groups[key]) {
-            groups[key] = {
-                category: tx.category,
-                possibleCategories: tx.possibleCategories,
-                total: 0,
+        if (!grouped[key]) {
+            grouped[key] = {
                 count: 0,
+                total: 0,
+                possibleCategories: tx.possibleCategories || [CATEGORIES.GROCERIES, CATEGORIES.SHOPPING],
+                suggestedCategory: tx.category || CATEGORIES.GROCERIES,
             };
         }
-        groups[key].total += tx.amount;
-        groups[key].count += 1;
+        grouped[key].count++;
+        grouped[key].total += Math.abs(tx.amount);
     });
 
-    // Sort by total spend descending
-    return Object.fromEntries(
-        Object.entries(groups).sort((a, b) => b[1].total - a[1].total)
-    );
+    return grouped;
 }
 
-function formatCategoryName(cat) {
-    // "groceries" -> "Groceries"
-    return cat.charAt(0).toUpperCase() + cat.slice(1);
+function formatCategoryName(category) {
+    const names = {
+        [CATEGORIES.GROCERIES]: 'Groceries',
+        [CATEGORIES.GAS]: 'Gas & Fuel',
+        [CATEGORIES.DINING]: 'Dining',
+        [CATEGORIES.SHOPPING]: 'Shopping',
+        [CATEGORIES.TRAVEL]: 'Travel',
+        [CATEGORIES.TRANSIT]: 'Transit',
+        [CATEGORIES.RECURRING]: 'Bills',
+        [CATEGORIES.ENTERTAINMENT]: 'Entertainment',
+        [CATEGORIES.DELIVERY]: 'Delivery',
+        [CATEGORIES.OTHER]: 'Other',
+    };
+    return names[category] || category;
 }

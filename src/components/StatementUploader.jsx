@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react';
-import { Upload, FileText, X } from 'lucide-react';
+import { Upload, File, X } from 'lucide-react';
 import './StatementUploader.css';
 
 export function StatementUploader({ onFilesSelected }) {
-    const [isDragging, setIsDragging] = useState(false);
     const [files, setFiles] = useState([]);
+    const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef(null);
 
     const handleDragOver = (e) => {
@@ -20,89 +20,88 @@ export function StatementUploader({ onFilesSelected }) {
     const handleDrop = (e) => {
         e.preventDefault();
         setIsDragging(false);
-
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            handleFiles(Array.from(e.dataTransfer.files));
-        }
-    };
-
-    const handleFileInput = (e) => {
-        if (e.target.files && e.target.files.length > 0) {
-            handleFiles(Array.from(e.target.files));
-        }
+        handleFiles(Array.from(e.dataTransfer.files));
     };
 
     const handleFiles = (newFiles) => {
         const validFiles = newFiles.filter(file =>
-            file.type === 'application/pdf' ||
+            file.name.endsWith('.csv') ||
+            file.name.endsWith('.pdf') ||
             file.type === 'text/csv' ||
-            file.name.endsWith('.csv')
+            file.type === 'application/pdf'
         );
 
         const updatedFiles = [...files, ...validFiles];
         setFiles(updatedFiles);
-
         if (onFilesSelected) {
             onFilesSelected(updatedFiles);
         }
     };
 
-    const removeFile = (indexToRemove) => {
-        const updatedFiles = files.filter((_, index) => index !== indexToRemove);
+    const removeFile = (index) => {
+        const updatedFiles = files.filter((_, i) => i !== index);
         setFiles(updatedFiles);
         if (onFilesSelected) {
             onFilesSelected(updatedFiles);
         }
+    };
+
+    const formatFileSize = (bytes) => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(1) + ' MB';
     };
 
     return (
         <div className="uploader-container">
             <div
-                className={`drop-zone ${isDragging ? 'active' : ''}`}
+                className={`drop-zone ${isDragging ? 'dragging' : ''}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
             >
+                <div className="drop-icon">
+                    <Upload size={24} />
+                </div>
+                <p className="drop-title">Drop your bank statements</p>
+                <p className="drop-subtitle">or click to browse • CSV files supported</p>
+
+                <span className="browse-btn">Browse Files</span>
+
+                <p className="privacy-note">
+                    <span>●</span> 100% client-side processing • Your data never leaves your browser
+                </p>
+
                 <input
                     type="file"
                     ref={fileInputRef}
-                    onChange={handleFileInput}
+                    onChange={(e) => handleFiles(Array.from(e.target.files))}
+                    accept=".csv,.pdf"
                     multiple
-                    accept=".pdf,.csv"
-                    style={{ display: 'none' }}
+                    hidden
                 />
-
-                <div className="drop-zone-content">
-                    <div className="icon-wrapper">
-                        <Upload size={32} />
-                    </div>
-                    <h3>Drag & Drop Statements</h3>
-                    <p>Support for PDF and CSV files from major banks</p>
-                    <button className="btn-secondary">Browse Files</button>
-                </div>
             </div>
 
             {files.length > 0 && (
                 <div className="file-list">
-                    <h4>Uploaded Files ({files.length})</h4>
-                    <div className="files-grid">
-                        {files.map((file, index) => (
-                            <div key={index} className="file-item">
-                                <FileText size={20} className="file-icon" />
-                                <span className="file-name">{file.name}</span>
-                                <button
-                                    className="remove-btn"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        removeFile(index);
-                                    }}
-                                >
-                                    <X size={16} />
-                                </button>
+                    {files.map((file, index) => (
+                        <div key={index} className="file-item">
+                            <div className="file-info">
+                                <File size={20} className="file-icon" />
+                                <div>
+                                    <span className="file-name">{file.name}</span>
+                                    <span className="file-size">{formatFileSize(file.size)}</span>
+                                </div>
                             </div>
-                        ))}
-                    </div>
+                            <button
+                                className="remove-btn"
+                                onClick={(e) => { e.stopPropagation(); removeFile(index); }}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

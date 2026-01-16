@@ -1,0 +1,108 @@
+.spending-summary {
+    padding: var(--space-6);
+    margin-bottom: var(--space-6);
+}
+
+.spending-summary h3 {
+    margin-bottom: var(--space-6);
+}
+
+.summary-content {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: var(--space-8);
+    align-items: start;
+}
+
+@media (max-width: 640px) {
+    .summary-content {
+        grid-template-columns: 1fr;
+        gap: var(--space-6);
+    }
+}
+
+/* Donut Chart */
+.donut-container {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin: 0 auto;
+}
+
+.donut-chart {
+    width: 100%;
+    height: 100%;
+    transform: rotate(0deg);
+}
+
+.donut-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.donut-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    margin-bottom: var(--space-1);
+}
+
+.donut-total {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--foreground);
+}
+
+/* Category List */
+.category-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.category-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-3);
+    background: var(--background);
+    border-radius: var(--radius-md);
+}
+
+.category-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.category-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.category-name {
+    display: block;
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--foreground);
+}
+
+.category-percent {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+}
+
+.category-amount {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--foreground);
+}

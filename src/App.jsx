@@ -1,27 +1,40 @@
 import { useState } from 'react';
-import { ShieldCheck, Upload, BarChart3, CreditCard } from 'lucide-react';
+import { CreditCard, RotateCcw } from 'lucide-react';
+import { LandingHero } from './components/LandingHero';
+import { StepIndicator } from './components/StepIndicator';
 import { StatementUploader } from './components/StatementUploader';
 import { CategoryTuner } from './features/parsing/CategoryTuner';
+import { SpendingSummary } from './components/SpendingSummary';
+import { CardSelector } from './components/CardSelector';
+import { ResultsView } from './components/ResultsView';
 import { parseCSV, buildSpendProfile, getAmbiguousTransactions } from './features/parsing/csvParser';
 import { getRecommendations } from './features/recommender/engine';
+import { CARD_DATABASE } from './data/cardDatabase';
 import './App.css';
 
 // App states
 const STEP = {
-  UPLOAD: 'upload',
-  TUNING: 'tuning',
-  RESULTS: 'results',
+  LANDING: 0,
+  UPLOAD: 1,
+  VERIFY: 2,
+  SELECT_CARD: 3,
+  RESULTS: 4,
 };
 
 function App() {
-  const [step, setStep] = useState(STEP.UPLOAD);
+  const [step, setStep] = useState(STEP.LANDING);
   const [files, setFiles] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [ambiguousTransactions, setAmbiguousTransactions] = useState([]);
   const [spendProfile, setSpendProfile] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
+  const [currentCard, setCurrentCard] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showYear1, setShowYear1] = useState(true);
+
+  const handleGetStarted = () => {
+    setStep(STEP.UPLOAD);
+  };
 
   const handleFilesSelected = async (newFiles) => {
     setFiles(newFiles);
@@ -33,27 +46,25 @@ function App() {
     setIsLoading(true);
 
     try {
-      // Parse all files
       let allTransactions = [];
       for (const file of files) {
         if (file.name.endsWith('.csv') || file.type === 'text/csv') {
           const txns = await parseCSV(file);
           allTransactions = [...allTransactions, ...txns];
         }
-        // TODO: Add PDF parsing
       }
 
       setTransactions(allTransactions);
 
-      // Check for ambiguous transactions
       const ambiguous = getAmbiguousTransactions(allTransactions);
       setAmbiguousTransactions(ambiguous);
 
       if (ambiguous.length > 0) {
-        setStep(STEP.TUNING);
+        setStep(STEP.VERIFY);
       } else {
-        // Skip tuning, go straight to results
-        finalizeAnalysis(allTransactions);
+        const profile = buildSpendProfile(allTransactions);
+        setSpendProfile(profile);
+        setStep(STEP.SELECT_CARD);
       }
     } catch (error) {
       console.error('Error parsing files:', error);
@@ -63,7 +74,6 @@ function App() {
   };
 
   const handleTunerConfirm = (corrections) => {
-    // Apply corrections to transactions
     const correctedTransactions = transactions.map(tx => {
       const key = tx.description.toUpperCase().trim();
       if (corrections[key]) {
@@ -73,207 +83,142 @@ function App() {
     });
 
     setTransactions(correctedTransactions);
-    finalizeAnalysis(correctedTransactions);
-  };
-
-  const handleTunerCancel = () => {
-    setStep(STEP.UPLOAD);
-    setTransactions([]);
-    setAmbiguousTransactions([]);
-  };
-
-  const finalizeAnalysis = (txns) => {
-    // Build spend profile
-    const profile = buildSpendProfile(txns);
+    const profile = buildSpendProfile(correctedTransactions);
     setSpendProfile(profile);
+    setStep(STEP.SELECT_CARD);
+  };
 
-    // Get recommendations
-    const recs = getRecommendations(profile, {
+  const handleSelectCard = (cardId) => {
+    setCurrentCard(cardId);
+  };
+
+  const handleShowResults = () => {
+    const recs = getRecommendations(spendProfile, {
       includeWelcomeBonus: showYear1,
-      years: showYear1 ? 1 : 5
+      years: showYear1 ? 1 : 5,
+      currentCardId: currentCard
     });
     setRecommendations(recs);
-
     setStep(STEP.RESULTS);
   };
 
   const handleStartOver = () => {
-    setStep(STEP.UPLOAD);
+    setStep(STEP.LANDING);
     setFiles([]);
     setTransactions([]);
     setAmbiguousTransactions([]);
     setSpendProfile(null);
     setRecommendations([]);
+    setCurrentCard(null);
   };
 
   const toggleValueMode = () => {
     setShowYear1(!showYear1);
-    // Recalculate with new settings
     if (spendProfile) {
       const recs = getRecommendations(spendProfile, {
         includeWelcomeBonus: !showYear1,
-        years: !showYear1 ? 1 : 5
+        years: !showYear1 ? 1 : 5,
+        currentCardId: currentCard
       });
       setRecommendations(recs);
     }
   };
 
+  // Landing page - full screen
+  if (step === STEP.LANDING) {
+    return <LandingHero onGetStarted={handleGetStarted} />;
+  }
+
+  // Wizard flow
   return (
     <div className="app-container">
       {/* Header */}
       <header className="header">
         <div className="container header-content">
-          <div className="logo-section" onClick={handleStartOver} style={{ cursor: 'pointer' }}>
+          <div className="logo-section" onClick={handleStartOver}>
             <div className="logo-icon">
-              <span>S</span>
+              <CreditCard size={16} />
             </div>
             <span className="logo-text">SmartCard CA</span>
           </div>
 
-          <div className="status-section">
-            <div className="badge badge-success">
-              <ShieldCheck size={14} style={{ marginRight: '0.5rem' }} />
-              <span>Offline Mode</span>
-            </div>
-          </div>
+          <button className="start-over-btn" onClick={handleStartOver}>
+            Start Over
+          </button>
         </div>
       </header>
+
+      {/* Step Indicator */}
+      <StepIndicator currentStep={step} />
 
       {/* Main Content */}
       <main className="main-content container">
 
-        {/* STEP: UPLOAD */}
+        {/* STEP 1: UPLOAD */}
         {step === STEP.UPLOAD && (
-          <div className="hero">
-            <h1 className="hero-title">
-              Stop guessing. <br />
-              Start optimizing.
-            </h1>
-            <p className="hero-subtitle">
-              Upload your past statements to see exactly which Canadian credit card
-              would have earned you the most money.
+          <div className="step-content animate-fade-in">
+            <h2>Upload Your Bank Statements</h2>
+            <p className="step-description">
+              Drop your CSV statement files below. We recommend uploading 3-12 months for accurate results.
             </p>
 
-            <div style={{ marginTop: '2rem' }}>
-              <StatementUploader onFilesSelected={handleFilesSelected} />
-            </div>
+            <StatementUploader onFilesSelected={handleFilesSelected} />
 
             {files.length > 0 && (
               <button
                 className="btn-primary"
                 onClick={handleAnalyze}
                 disabled={isLoading}
-                style={{ marginTop: '1.5rem' }}
               >
-                {isLoading ? 'Analyzing...' : 'Analyze My Spend'}
+                {isLoading ? 'Analyzing...' : 'Continue'}
               </button>
             )}
-
-            <p className="trust-badge">
-              100% Client-Side • No Data Leaves Your Device
-            </p>
           </div>
         )}
 
-        {/* STEP: TUNING (Category Verification) */}
-        {step === STEP.TUNING && (
-          <CategoryTuner
-            ambiguousTransactions={ambiguousTransactions}
-            onConfirm={handleTunerConfirm}
-            onCancel={handleTunerCancel}
-          />
+        {/* STEP 2: VERIFY */}
+        {step === STEP.VERIFY && (
+          <div className="step-content animate-fade-in">
+            <CategoryTuner
+              ambiguousTransactions={ambiguousTransactions}
+              onConfirm={handleTunerConfirm}
+              onCancel={handleStartOver}
+            />
+          </div>
         )}
 
-        {/* STEP: RESULTS */}
-        {step === STEP.RESULTS && spendProfile && (
-          <div className="results-view">
-            <div className="results-header">
-              <h2>Your Best Cards</h2>
-              <div className="toggle-container">
-                <button
-                  className={`toggle-btn ${showYear1 ? 'active' : ''}`}
-                  onClick={() => !showYear1 && toggleValueMode()}
-                >
-                  Year 1 Value
-                </button>
-                <button
-                  className={`toggle-btn ${!showYear1 ? 'active' : ''}`}
-                  onClick={() => showYear1 && toggleValueMode()}
-                >
-                  Long-Term (5yr)
-                </button>
-              </div>
-            </div>
+        {/* STEP 3: SELECT CARD */}
+        {step === STEP.SELECT_CARD && spendProfile && (
+          <div className="step-content animate-fade-in">
+            <h2>Select Your Current Card</h2>
+            <p className="step-description">
+              Tell us which card you currently use so we can show you how much more you could earn.
+            </p>
 
-            {/* Spend Summary */}
-            <div className="spend-summary card">
-              <h3><BarChart3 size={20} /> Your Spend Profile</h3>
-              <p className="total-spend">
-                Total Analyzed: <strong>${spendProfile.grandTotal.toLocaleString('en-CA', { minimumFractionDigits: 2 })}</strong>
-              </p>
-              <div className="category-bars">
-                {Object.entries(spendProfile.categories)
-                  .filter(([_, data]) => data.total > 0)
-                  .sort((a, b) => b[1].total - a[1].total)
-                  .map(([category, data]) => (
-                    <div key={category} className="category-bar-row">
-                      <span className="cat-name">{category}</span>
-                      <div className="bar-container">
-                        <div
-                          className="bar-fill"
-                          style={{ width: `${data.percentage}%` }}
-                        />
-                      </div>
-                      <span className="cat-amount">${data.total.toLocaleString('en-CA', { minimumFractionDigits: 0 })}</span>
-                    </div>
-                  ))
-                }
-              </div>
-            </div>
+            <SpendingSummary spendProfile={spendProfile} />
 
-            {/* Recommendations */}
-            <div className="recommendations-grid">
-              {recommendations.map((rec, index) => (
-                <div key={rec.cardId} className={`recommendation-card ${index === 0 ? 'top-pick' : ''}`}>
-                  {index === 0 && <div className="top-pick-badge">🏆 Top Pick</div>}
-                  <div className="card-header">
-                    <CreditCard size={24} />
-                    <div>
-                      <h4>{rec.cardName}</h4>
-                      <span className="issuer">{rec.issuer} • {rec.network}</span>
-                    </div>
-                  </div>
-                  <div className="card-value">
-                    <span className="value-label">{showYear1 ? 'Year 1' : '5-Year'} Value</span>
-                    <span className="value-amount">
-                      ${rec.netValue.toLocaleString('en-CA', { minimumFractionDigits: 0 })}
-                    </span>
-                  </div>
-                  <div className="card-breakdown">
-                    <div className="breakdown-row">
-                      <span>Annual Rewards</span>
-                      <span className="positive">+${rec.annualRewards.toLocaleString('en-CA', { minimumFractionDigits: 0 })}</span>
-                    </div>
-                    {rec.welcomeBonusValue > 0 && showYear1 && (
-                      <div className="breakdown-row">
-                        <span>Welcome Bonus</span>
-                        <span className="positive">+${rec.welcomeBonusValue.toLocaleString('en-CA', { minimumFractionDigits: 0 })}</span>
-                      </div>
-                    )}
-                    <div className="breakdown-row">
-                      <span>Annual Fee</span>
-                      <span className="negative">-${rec.annualFee}</span>
-                    </div>
-                  </div>
-                  <p className="card-notes">{rec.notes}</p>
-                </div>
-              ))}
-            </div>
+            <CardSelector
+              cards={CARD_DATABASE}
+              selectedCard={currentCard}
+              onSelect={handleSelectCard}
+            />
 
-            <button className="btn-secondary-lg" onClick={handleStartOver}>
-              Start Over
+            <button className="btn-primary" onClick={handleShowResults}>
+              Show My Results ✨
             </button>
           </div>
+        )}
+
+        {/* STEP 4: RESULTS */}
+        {step === STEP.RESULTS && spendProfile && (
+          <ResultsView
+            spendProfile={spendProfile}
+            recommendations={recommendations}
+            currentCard={currentCard}
+            showYear1={showYear1}
+            onToggleValueMode={toggleValueMode}
+            onStartOver={handleStartOver}
+          />
         )}
 
       </main>
@@ -282,4 +227,3 @@ function App() {
 }
 
 export default App;
-

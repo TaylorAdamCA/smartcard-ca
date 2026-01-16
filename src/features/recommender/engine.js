@@ -24,24 +24,21 @@ export function calculateCardValue(card, spendProfile, options = {}) {
         // Get multiplier for this category
         let multiplier = card.multipliers?.[category] || card.baseMultiplier || 0;
 
-        // Handle cashback vs points
-        if (card.rewardType === 'points') {
-            // Points: spend * multiplier = points, then * pointValue for cash equivalent
-            const points = spend * multiplier;
-            totalRewards += points * (card.pointValue || 0.01);
-        } else {
-            // Cashback: multiplier is already a percentage (e.g., 0.03 = 3%)
-            totalRewards += spend * multiplier;
-        }
+        // Calculate rewards value
+        // Our database standardizes on integer/float multipliers (e.g. 5x or 4%) and pointValue (e.g. 0.01)
+        // So we can use the same formula for both Points and Cashback cards
+        const points = spend * multiplier;
+        totalRewards += points * (card.pointValue || 0.01);
     });
 
     // Calculate welcome bonus value (first year only if applicable)
     let welcomeBonusValue = 0;
     if (includeWelcomeBonus && card.welcomeBonus && years >= 1) {
-        if (card.rewardType === 'points' && card.welcomeBonus.points) {
+        if (card.welcomeBonus.value) {
+            // If explicit value is provided (which we did for all database entries)
+            welcomeBonusValue = card.welcomeBonus.value;
+        } else if (card.welcomeBonus.points) {
             welcomeBonusValue = card.welcomeBonus.points * (card.pointValue || 0.01);
-        } else if (card.welcomeBonus.cashback) {
-            welcomeBonusValue = card.welcomeBonus.cashback;
         }
     }
 
